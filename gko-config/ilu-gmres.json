@@ -1,0 +1,20 @@
+{
+    "exec": "cuda",
+    "type": "solver::Gmres",
+    "preconditioner": {
+        "type": "preconditioner::Ilu",
+        "factorization": {
+            "type": "factorization::Ilu"
+        }
+    },
+    "criteria": [
+        {
+            "type": "Iteration",
+            "max_iters": 100
+        },
+        {
+            "type": "ResidualNorm",
+            "reduction_factor": 1e-5
+        }
+    ]
+}

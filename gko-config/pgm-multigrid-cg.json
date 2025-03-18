@@ -1,0 +1,31 @@
+{
+    "exec": "cuda",
+    "type": "solver::Cg",
+    "preconditioner": {
+        "type": "solver::Multigrid",
+        "min_coarse_rows": 2,
+        "mg_level": [
+            {
+                "type": "multigrid::Pgm",
+                "deterministic": true
+            }
+        ],
+        "criteria": [
+            {
+                "type": "Iteration",
+                "max_iters": 1
+            }
+        ]
+    },
+    "criteria": [
+        {
+            "type": "Iteration",
+            "max_iters": 200
+        },
+        {
+            "type": "ResidualNorm",
+            "reduction_factor": 1e-4,
+            "baseline": "absolute"
+        }
+    ]
+}

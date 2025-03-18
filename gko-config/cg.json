@@ -1,0 +1,14 @@
+{
+    "exec": "cuda",
+    "type": "solver::Cg",
+    "criteria": [
+        {
+            "type": "Iteration",
+            "max_iters": 100
+        },
+        {
+            "type": "ResidualNorm",
+            "reduction_factor": 1e-3
+        }
+    ]
+}
