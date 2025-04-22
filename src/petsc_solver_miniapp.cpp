@@ -8,11 +8,14 @@
 #include <petsc.h>
 
 //#include "case_names.hpp"
+#include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <iomanip>
 
+#include "config.hpp"
 #include "yaml-cpp/yaml.h"
+
+constexpr bool FILE_DEBUG = true;
 
 using Path = std::filesystem::path;
 
@@ -22,7 +25,7 @@ PetscErrorCode load_vector_from_binary(const Path& filename, Vec& v)
     PetscCall(PetscViewerBinaryOpen(PETSC_COMM_WORLD, filename.c_str(),
                                     FILE_MODE_READ, &viewer));
 
-    PetscCall(VecCreate(PETSC_COMM_WORLD, &v));   
+    PetscCall(VecCreate(PETSC_COMM_WORLD, &v));
     PetscCall(VecLoad(v, viewer));
     PetscCall(PetscViewerDestroy(&viewer));
     PetscCall(VecSetFromOptions(v));
@@ -43,7 +46,8 @@ PetscErrorCode load_matrix_from_binary(const Path& filename, Mat& A)
 
 PetscErrorCode output_stdout(const std::string& system_name,
                              const KSPType& solver_type, PetscReal rtol,
-                             const PCType& pc_type, double timing, int nrep, int iters)
+                             const PCType& pc_type, double timing, int nrep,
+                             int iters)
 {
     std::string message = "Solver timings for case " + system_name + ":\n";
     message += "\tSolver type: " + std::string(solver_type) + "\n";
@@ -54,7 +58,7 @@ PetscErrorCode output_stdout(const std::string& system_name,
     message += "\tNum iters for convergence: " + std::to_string(iters) + "\n";
     message +=
         "\tAverage time per repetition: " + std::to_string(timing / nrep) +
-        "s\n";    
+        "s\n";
     message += "\n";
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, message.c_str()));
 
@@ -62,7 +66,8 @@ PetscErrorCode output_stdout(const std::string& system_name,
 }
 
 void output_yaml(const std::string& system_name, const KSPType& solver_type,
-                 PetscReal rtol, const PCType& pc_type, double timing, int nrep,int iters)
+                 PetscReal rtol, const PCType& pc_type, double timing, int nrep,
+                 int iters)
 {
     YAML::Emitter out;
     out << YAML::BeginMap;
@@ -118,8 +123,8 @@ PetscErrorCode print_run_info(const std::string& system_name, const KSP& solver,
     PCType pc_type;
     PetscCall(PCGetType(pc, &pc_type));
 
-    PetscCall(
-	      output_stdout(system_name, solver_type, rtol, pc_type, timing, nrep, iters));
+    PetscCall(output_stdout(system_name, solver_type, rtol, pc_type, timing,
+                            nrep, iters));
     output_yaml(system_name, solver_type, rtol, pc_type, timing, nrep, iters);
 
     PetscFunctionReturn(0);
@@ -133,6 +138,9 @@ PetscErrorCode solve_system_named(std::string system_name, const Path& root_dir,
     Vec b{};
     std::string filename = std::to_string(sys) + "_RHS_" + system_name;
     Path file_path = root_dir / filename;
+    if (FILE_DEBUG) {
+        std::cout << "Rhs path: " << file_path.string() << std::endl;
+    }
     PetscCall(load_vector_from_binary(file_path, b));
 
     // Load LHS and create preconditioner matrix
@@ -140,22 +148,25 @@ PetscErrorCode solve_system_named(std::string system_name, const Path& root_dir,
 
     switch (sys) {
     case 1:
-      filename = "p_doubleprime_" + system_name;
-      break;
+        filename = "p_doubleprime_" + system_name;
+        break;
     case 2:
-      filename = "Laplacian_" + system_name;
-      break;
+        filename = "Laplacian_" + system_name;
+        break;
     case 3:
-      filename = "U_" + system_name;
-      break;
+        filename = "U_" + system_name;
+        break;
     }
     file_path = root_dir / filename;
+    if (FILE_DEBUG) {
+        std::cout << "Matrix path" << file_path.string() << std::endl;
+    }
     PetscCall(load_matrix_from_binary(file_path, A));
-    
+
     PetscCall(MatConvert(A, MATSEQAIJCUSPARSE, MAT_INPLACE_MATRIX, &A));
-    
+
     //    Mat P{};
-    //PetscCall(MatDuplicate(A, MAT_COPY_VALUES, &P));
+    // PetscCall(MatDuplicate(A, MAT_COPY_VALUES, &P));
 
     // Load and store guess  to reuse
     Vec guess{};
@@ -170,31 +181,32 @@ PetscErrorCode solve_system_named(std::string system_name, const Path& root_dir,
     // Create solver & solve the system
     KSP solver;
     KSPType mytype;
-    
+
     PetscCall(KSPCreate(PETSC_COMM_WORLD, &solver));
     PetscCall(KSPSetOperators(solver, A, A));
     PetscCall(KSPSetFromOptions(solver));
     PetscCall(KSPGetType(solver, &mytype));
     if (mytype == "ksppreonly") {
-      // no guess here
+        // no guess here
     } else {
-      std::cout << "type is "<< mytype <<"-"<< KSPPREONLY<<std::endl;
-      PetscCall(KSPSetInitialGuessNonzero(solver, PETSC_TRUE));
+        std::cout << "type is " << mytype << "-" << KSPPREONLY << std::endl;
+        PetscCall(KSPSetInitialGuessNonzero(solver, PETSC_TRUE));
     }
     PetscCall(KSPSetUp(solver));
 
     double timing_solve = 0.0;
     PetscInt its, its_avg = 0.0;
-    
+
     for (int rep = 0; rep < nrep; ++rep) {
         PetscCall(VecCopy(guess, x));
         auto t1 = MPI_Wtime();
         PetscCall(KSPSolve(solver, b, x));
         timing_solve += (MPI_Wtime() - t1);
-	PetscCall(KSPGetIterationNumber(solver, &its));
-	its_avg += its;
+        PetscCall(KSPGetIterationNumber(solver, &its));
+        its_avg += its;
     }
-    PetscCall(print_run_info(system_name, solver, timing_solve, nrep, its_avg/nrep));
+    PetscCall(print_run_info(system_name, solver, timing_solve, nrep,
+                             its_avg / nrep));
 
     PetscCall(VecDestroy(&x));
     PetscCall(VecDestroy(&guess));
@@ -216,21 +228,22 @@ int main(int argc, char* argv[])
     std::ostringstream oss;
 
     for (int i = 0; i < number_of_cases; i++) {
-      oss.str("");
-      oss << std::setw(3) << std::setfill('0') << i;
-      case_names[i] = oss.str();
+        oss.str("");
+        oss << std::setw(3) << std::setfill('0') << i;
+        case_names[i] = oss.str();
     }
 
     PetscCall(PetscInitialize(&argc, &argv, NULL, NULL));
 
-    Path root_dir("/ptmp/abanonna/public/matrices/");
+    Path root_dir(MINIAPP_DATA_PATH);
 
-    int sys  = argc >= 2 ? std::stoi(argv[1]) : 3;
+    int sys = argc >= 2 ? std::stoi(argv[1]) : 3;
 
-    std::cout << "###########\nSolving with petsc system "<< sys << std::endl;
+    std::cout << "###########\nSolving with petsc system " << sys << ", "
+              << case_names[0] << std::endl;
 
     for (auto case_name : case_names) {
-      PetscCall(solve_system_named(case_name, root_dir, NREP, sys));
+        PetscCall(solve_system_named(case_name, root_dir, NREP, sys));
     }
 
     PetscCall(PetscFinalize());

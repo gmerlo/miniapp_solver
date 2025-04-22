@@ -7,6 +7,19 @@ project("PETSc Solver Miniapp"
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+set(MINIAPP_DATA_PATH $ENV{MINIAPP_DATA_PATH})
+if(MINIAPP_DATA_PATH)
+  message(STATUS "Data path set to ${MINIAPP_DATA_PATH}")
+else()
+  message(WARNING "Data path not set. ")
+endif()
+
+configure_file(
+    ${CMAKE_SOURCE_DIR}/src/config.hpp.in
+    ${CMAKE_BINARY_DIR}/include/config.hpp
+    @ONLY
+)
+
 find_package(MPI REQUIRED)
 find_package(PETSc REQUIRED)
 find_package(Ginkgo REQUIRED)
@@ -27,6 +40,7 @@ add_executable(petsc_solver_miniapp
 
 target_include_directories(petsc_solver_miniapp PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_BINARY_DIR}/include
 )
 
 target_link_libraries(petsc_solver_miniapp PRIVATE
@@ -36,6 +50,8 @@ target_link_libraries(petsc_solver_miniapp PRIVATE
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # The nlohmann_json library is needed for the Ginkgo file config.
 # If it is not available, it is fetched from github.
@@ -59,6 +75,7 @@ add_executable(gko_solver_miniapp
 
 target_include_directories(gko_solver_miniapp PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_BINARY_DIR}/include
 )
 
 target_link_libraries(gko_solver_miniapp PRIVATE

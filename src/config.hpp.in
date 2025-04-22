@@ -1,0 +1,6 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define MINIAPP_DATA_PATH "@MINIAPP_DATA_PATH@"
+
+#endif
