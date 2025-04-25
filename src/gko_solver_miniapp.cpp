@@ -227,28 +227,11 @@ PetscErrorCode solve_system_named(const std::shared_ptr<gko::Executor>& exec,
     auto guess_dev = gko_vec::create(exec);
     guess_dev->copy_from(guess_host);
 
-    // auto sol_clone = gko::clone(rhs);
-
     auto reg = gko::config::registry();
     auto td = gko::config::make_type_descriptor<vtype, itype>();
-    /*
+
     auto solver_gen = gko::config::parse(config, reg, td).on(exec);
     auto solver = solver_gen->generate(mat);
-    */
-
-    auto solver_gen =
-        gko::solver::Bicgstab<vtype>::build()
-            .with_preconditioner(
-                gko::preconditioner::Jacobi<vtype>::build().with_max_block_size(
-                    1))
-            .with_criteria(gko::stop::Iteration::build().with_max_iters(200),
-                           gko::stop::ResidualNorm<vtype>::build()
-                               .with_reduction_factor(1e-4)
-                               .on(exec))
-            .on(exec);
-
-    auto solver = solver_gen->generate(mat);
-
 
     std::shared_ptr<gko::log::Convergence<vtype>> logger =
         gko::log::Convergence<vtype>::create();
@@ -256,7 +239,6 @@ PetscErrorCode solve_system_named(const std::shared_ptr<gko::Executor>& exec,
 
     double timing_solve = 0.0;
     for (int rep = 0; rep < nrep; ++rep) {
-        // sol->copy_from(sol_clone);
         sol->copy_from(guess_dev);
         auto t1 = MPI_Wtime();
         solver->apply(rhs, sol);

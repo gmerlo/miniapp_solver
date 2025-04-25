@@ -1,6 +1,6 @@
 {
     "exec": "cuda",
-    "type": "solver::Cg",
+    "type": "solver::Bicgstab",
     "criteria": [
         {
             "type": "Iteration",
