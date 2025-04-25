@@ -11,10 +11,12 @@
 
 #include <ginkgo/extensions/config/json_config.hpp>
 
+#include "config.hpp"
+
 //#include "case_names.hpp"
+#include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <iomanip>
 
 #include "yaml-cpp/yaml.h"
 
@@ -140,8 +142,8 @@ PetscErrorCode solve_system_named(const std::shared_ptr<gko::Executor>& exec,
     using itype = PetscInt;
     using gko_vec = gko::matrix::Dense<vtype>;
     using gko_mat = gko::matrix::Csr<vtype, itype>;
-    //using gko_cg = gko::solver::Cg<vtype>;
-    
+    // using gko_cg = gko::solver::Cg<vtype>;
+
     // Load RHS
     Vec b{};
     std::string filename = std::to_string(sys) + "_RHS_" + system_name;
@@ -163,14 +165,14 @@ PetscErrorCode solve_system_named(const std::shared_ptr<gko::Executor>& exec,
     Mat A{};
     switch (sys) {
     case 1:
-      filename = "p_doubleprime_" + system_name;
-      break;
+        filename = "p_doubleprime_" + system_name;
+        break;
     case 2:
-      filename = "Laplacian_" + system_name;
-      break;
+        filename = "Laplacian_" + system_name;
+        break;
     case 3:
-      filename = "U_" + system_name;
-      break;
+        filename = "U_" + system_name;
+        break;
     }
     file_path = root_dir / filename;
     PetscCall(load_matrix_from_binary(file_path, A));
@@ -183,11 +185,12 @@ PetscErrorCode solve_system_named(const std::shared_ptr<gko::Executor>& exec,
     PetscBool inodecomp = PETSC_FALSE;
 
     PetscCall(MatScale(A, -1.0));
-    
+
     PetscCall(MatSeqAIJGetArray(A, &values));
-    PetscCall(MatGetRowIJ(A, 0, symm, inodecomp, &num_rows, &row_ptrs,
-                          &col_idxs, &done));
-    
+    PetscCall(MatGetRowIJ(A, 0, symm, inodecomp, &num_rows,
+                          const_cast<const itype**>(&row_ptrs),
+                          const_cast<const itype**>(&col_idxs), &done));
+
     if (rhs_size != num_rows) {
         PetscCall(PetscError(PETSC_COMM_WORLD, __LINE__, "solve_system_named",
                              __FILE__, PETSC_ERR_ARG_SIZ, PETSC_ERROR_INITIAL,
@@ -216,34 +219,19 @@ PetscErrorCode solve_system_named(const std::shared_ptr<gko::Executor>& exec,
     itype guess_size;
     PetscCall(VecGetArray(guess, &guess_values));
     PetscCall(VecGetSize(guess, &guess_size));
-    auto guess_host = gko_vec::create_const(
-        exec->get_master(), gko::dim<2>(guess_size, 1),
-        gko::array<vtype>::const_view(exec->get_master(), guess_size, guess_values),
-        1);
+    auto guess_host =
+        gko_vec::create_const(exec->get_master(), gko::dim<2>(guess_size, 1),
+                              gko::array<vtype>::const_view(
+                                  exec->get_master(), guess_size, guess_values),
+                              1);
     auto guess_dev = gko_vec::create(exec);
     guess_dev->copy_from(guess_host);
 
-    //auto sol_clone = gko::clone(rhs);
-
     auto reg = gko::config::registry();
     auto td = gko::config::make_type_descriptor<vtype, itype>();
-    /*
+
     auto solver_gen = gko::config::parse(config, reg, td).on(exec);
     auto solver = solver_gen->generate(mat);
-    */
-    
-    auto solver_gen = gko::solver::Bicgstab<vtype>::build()
-      .with_preconditioner(gko::preconditioner::Jacobi<vtype>::build()
-			   .with_max_block_size(1) )
-      .with_criteria(
-		     gko::stop::Iteration::build().with_max_iters(200),
-		     gko::stop::ResidualNorm<vtype>::build().with_reduction_factor(1e-4)
-		     .on(exec))
-      .on(exec);
-      
-    auto solver= solver_gen->generate(mat);
-
-    
 
     std::shared_ptr<gko::log::Convergence<vtype>> logger =
         gko::log::Convergence<vtype>::create();
@@ -251,11 +239,10 @@ PetscErrorCode solve_system_named(const std::shared_ptr<gko::Executor>& exec,
 
     double timing_solve = 0.0;
     for (int rep = 0; rep < nrep; ++rep) {
-      //sol->copy_from(sol_clone);
-      sol->copy_from(guess_dev);
-      auto t1 = MPI_Wtime();
-      solver->apply(rhs, sol);
-      timing_solve += (MPI_Wtime() - t1);
+        sol->copy_from(guess_dev);
+        auto t1 = MPI_Wtime();
+        solver->apply(rhs, sol);
+        timing_solve += (MPI_Wtime() - t1);
     }
 
     const int conv_iters = logger->get_num_iterations();
@@ -279,12 +266,13 @@ int main(int argc, char* argv[])
     std::ostringstream oss;
 
     for (int i = 0; i < number_of_cases; i++) {
-      oss.str("");
-      oss << std::setw(3) << std::setfill('0') << i;
-      case_names[i] = oss.str();
+        oss.str("");
+        oss << std::setw(3) << std::setfill('0') << i;
+        case_names[i] = oss.str();
     }
-    
+
     PetscCall(PetscInitialize(&argc, &argv, NULL, NULL));
+    static_assert(std::is_same_v<float, PetscScalar> == true);
 
     std::map<std::string, std::function<std::shared_ptr<gko::Executor>()>>
         exec_map{
@@ -305,23 +293,25 @@ int main(int argc, char* argv[])
              }},
             {"reference", [] { return gko::ReferenceExecutor::create(); }}};
 
-    Path root_dir("/ptmp/abanonna/public/matrices/");
+    Path root_dir(MINIAPP_DATA_PATH);
 
     std::string configfile = argc >= 2 ? argv[1] : "gko-config/cg.json";
-    
+
     auto config = gko::ext::config::parse_json_file(configfile);
     auto executor_string = config.get("exec").get_string();
 
-    std::cout<<executor_string<<std::endl;
-    
+    std::cout << executor_string << std::endl;
+
     const auto exec = exec_map.at(executor_string)();
 
-    int sys  = argc >= 3 ? std::stoi(argv[2]) : 3;
+    int sys = argc >= 3 ? std::stoi(argv[2]) : 3;
 
-    std::cout << "###########\nSolving with ginkgo system: "<< sys << std::endl;
+    std::cout << "###########\nSolving with ginkgo system: " << sys
+              << std::endl;
 
     for (auto case_name : case_names) {
-      PetscCall(solve_system_named(exec, case_name, config, root_dir, NREP, sys));
+        PetscCall(
+            solve_system_named(exec, case_name, config, root_dir, NREP, sys));
     }
 
     PetscCall(PetscFinalize());
