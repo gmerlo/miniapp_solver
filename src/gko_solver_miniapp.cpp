@@ -272,6 +272,7 @@ int main(int argc, char* argv[])
     }
 
     PetscCall(PetscInitialize(&argc, &argv, NULL, NULL));
+    static_assert(std::is_same_v<float, PetscScalar> == true);
 
     std::map<std::string, std::function<std::shared_ptr<gko::Executor>()>>
         exec_map{

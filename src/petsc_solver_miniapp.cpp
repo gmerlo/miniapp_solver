@@ -234,6 +234,7 @@ int main(int argc, char* argv[])
     }
 
     PetscCall(PetscInitialize(&argc, &argv, NULL, NULL));
+    static_assert(std::is_same_v<float, PetscScalar> == true);
 
     Path root_dir(MINIAPP_DATA_PATH);
 
